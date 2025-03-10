@@ -3,7 +3,7 @@ const authMiddleware = require('../middlerwares/authMiddleware')
 const hardwareController = require('../controllers/hardwareController')
 const router = require('express').Router()
 
-router.post('/get-user-hardware',authMiddleware.authMiddleware, userController.getUserHardware)
+router.get('/get-user-hardware',authMiddleware.authMiddleware, userController.getUserHardware)
 
 router.post ('/set-hardware-status',authMiddleware.authMiddleware, userController.updateHardwareStatus)
 

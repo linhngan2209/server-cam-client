@@ -206,7 +206,7 @@ const getLogHardware = async (req, res) => {
   }
 }
 
-const getHardwareStatusById = async (req, res) => {
+const  getHardwareStatusById = async (req, res) => {
   try {
     const {id} = req.params;
     const hardwareStatus = await Hardware_Status.findOne({

@@ -1,43 +1,48 @@
 const db = require('../models');
 const User = db.user;
-const {Op} = require('sequelize');
+const { Op } = require('sequelize');
 const Yup = require("yup");
 const User_Hardware = db.user_hardware;
 const Hardware = db.hardware
 const Param = db.param
 const sequelize = db.sequelize
 const Hardware_Status = db.hardware_status
-const {paramToHardware, hardwareStatusToHardware, hardwareStatusGOToHardware} = require('../services/messageToHardware')
-const {convert, converpercent} = require('../services/convertData')
-const {sendMessage} = require('../services/mqttServices')
+const { paramToHardware, hardwareStatusToHardware, hardwareStatusGOToHardware } = require('../services/messageToHardware')
+const { convert, converpercent } = require('../services/convertData')
+const { sendMessage } = require('../services/mqttServices')
 
 const getUserHardware = async (req, res) => {
   try {
     const userId = req.userId;
     const schema = Yup.object().shape({
       limit: Yup.number()
-        .required('Limit is required')
-        .min(0, 'Limit must be greater than or equal to 0'), // Giới hạn limit phải >= 0
+        .min(0, 'Limit must be greater than or equal to 0')
+        .default(10), 
       page: Yup.number()
-        .required('Page is required')
-        .min(1, 'Page must be greater than or equal to 0'),  // Giới hạn page phải >= 0
+        .min(1, 'Page must be greater than or equal to 1')
+        .default(1), 
     });
-    if (!(await schema.isValid(req.body))) {
-      const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+
+    try {
+      await schema.validate(req.query, { abortEarly: false });
+    } catch (validationError) {
       return res.status(400).json({
         statusCode: 400,
-        message: errors.errors,
+        message: validationError.errors,
       });
     }
-    const {limit, page} = req.body;
+
+    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * limit;
-    console.log("userId = ", userId)
+
     if (!userId) {
       return res.status(400).json({
         statusCode: 400,
         message: "UserId is required",
       });
     }
+
     const user_hardwarePromise = User_Hardware.findAll({
       where: {
         user_id: userId,
@@ -55,6 +60,7 @@ const getUserHardware = async (req, res) => {
       limit: limit,
       offset: offset,
     });
+
     const userHardwareCount = User_Hardware.count({
       where: {
         user_id: userId,
@@ -63,14 +69,19 @@ const getUserHardware = async (req, res) => {
       distinct: true,
       col: 'hardware_id',
     });
+
     const [count, user_hardware] = await Promise.all([userHardwareCount, user_hardwarePromise]);
+
     if (user_hardware.length === 0) {
       return res.status(200).json({
         statusCode: 200,
         message: "User Hardware Not Found",
         data: [],
+        totalPages: 0,
+        total: 0
       });
     }
+
     const hardwares = await Promise.all(user_hardware.map(async (item) => {
       const status_h = await Hardware_Status.findAll({
         where: {
@@ -79,6 +90,7 @@ const getUserHardware = async (req, res) => {
         order: [['createdAt', 'DESC']],
         limit: 1,
       });
+
       if (status_h.length === 0) {
         return {
           id: item.hardware.id,
@@ -105,23 +117,26 @@ const getUserHardware = async (req, res) => {
         };
       }
     }));
+
     const totalPages = Math.ceil(count / limit);
     const total = count;
+
     return res.status(200).json({
       statusCode: 200,
       message: "OK",
-      data: hardwares, totalPages, total
+      data: hardwares,
+      totalPages,
+      total
     });
 
   } catch (e) {
-    console.log(e)
+    console.log(e);
     return res.status(500).json({
       statusCode: 500,
       message: 'Internal Server Error',
     });
   }
-}
-
+};
 const updateHardwareStatus = async (req, res) => {
   try {
     const userId = req.userId;
@@ -130,7 +145,7 @@ const updateHardwareStatus = async (req, res) => {
       hardware_status: Yup.string().oneOf(['DN', 'UP', 'ST', 'CF', 'RS', 'GO']).required(),
       percent_opening_closing: Yup.string().nullable(),
     });
-    const {hardware_id, hardware_status, percent_opening_closing} = req.body;
+    const { hardware_id, hardware_status, percent_opening_closing } = req.body;
     if (percent_opening_closing.length !== 0) {
       if (hardware_status !== "GO") {
         return res.status(400).json({
@@ -144,7 +159,7 @@ const updateHardwareStatus = async (req, res) => {
         })
       }
       if (!(await schema.isValid(req.body))) {
-        const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+        const errors = await schema.validate(req.body, { abortEarly: false }).catch(err => err);
         return res.status(400).json({
           statusCode: 400,
           message: errors.errors,
@@ -294,7 +309,7 @@ const updateHardwareParam = async (req, res) => {
       }).required(),
       hardware_id: Yup.number().required(),
     });
-    const {percent_opening_closing, time, days, hardware_id} = req.body;
+    const { percent_opening_closing, time, days, hardware_id } = req.body;
     if (Number(percent_opening_closing) < 0 || Number(percent_opening_closing) > 100) {
       return res.status(400).json({
         statusCode: 400,
@@ -302,7 +317,7 @@ const updateHardwareParam = async (req, res) => {
       })
     }
     if (!(await schema.isValid(req.body))) {
-      const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+      const errors = await schema.validate(req.body, { abortEarly: false }).catch(err => err);
       return res.status(400).json({
         statusCode: 400,
         message: errors.errors,
@@ -456,13 +471,13 @@ const getUserByUserName = async (req, res) => {
       username: Yup.string().required(),
     });
     if (!(await schema.isValid(req.body))) {
-      const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+      const errors = await schema.validate(req.body, { abortEarly: false }).catch(err => err);
       return res.status(400).json({
         statusCode: 400,
         message: errors.errors,
       });
     }
-    const {username} = req.body;
+    const { username } = req.body;
     const user = await User.findAll({
       where: {
         username: {
@@ -496,13 +511,13 @@ const getParamByHardwareId = async (req, res) => {
       hardware_id: Yup.number().required(),
     });
     if (!(await schema.isValid(req.body))) {
-      const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+      const errors = await schema.validate(req.body, { abortEarly: false }).catch(err => err);
       return res.status(400).json({
         statusCode: 400,
         message: errors.errors,
       });
     }
-    const {hardware_id} = req.body;
+    const { hardware_id } = req.body;
     const latestParams = await Param.findAll({
       where: {
         hardware_id: hardware_id,
@@ -573,13 +588,13 @@ const updateParam = async (req, res) => {
       hardware_id: Yup.number().required(),
     });
     if (!(await schema.isValid(req.body))) {
-      const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+      const errors = await schema.validate(req.body, { abortEarly: false }).catch(err => err);
       return res.status(400).json({
         statusCode: 400,
         message: errors.errors,
       });
     }
-    const {percent_opening_closing, time, days, hardware_id} = req.body;
+    const { percent_opening_closing, time, days, hardware_id } = req.body;
     if (Number(percent_opening_closing) < 0 || Number(percent_opening_closing) > 100) {
       return res.status(400).json({
         statusCode: 400,
@@ -734,7 +749,7 @@ const sendCommand = async (req, res) => {
     message: Yup.string().required(),
   });
   if (!(await schema.isValid(req.body))) {
-    const errors = await schema.validate(req.body, {abortEarly: false}).catch(err => err);
+    const errors = await schema.validate(req.body, { abortEarly: false }).catch(err => err);
     return res.status(400).json({
       statusCode: 400,
       message: errors.errors,

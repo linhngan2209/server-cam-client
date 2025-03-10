@@ -3,18 +3,19 @@ const moment = require('moment');
 
 let jwtidCounter = 0;
 const blacklist = [];
-
+const SERVER_JWT_SECRET = 'JFKLDSJFLAJWJILJF3454HHH_JI4';
+const SERVER_JWT = true
 const JwtService = {
   jwtSign: (_payload, options) => {
     try {
-      if (process.env.SERVER_JWT !== "true") {
+      if (SERVER_JWT !== true) {
         throw new Error("[JWT] Fastify JWT flag is not set");
       }
       console.log("[JWT] Generating fastify JWT sign");
       const payload = JSON.parse(JSON.stringify(_payload));
       jwtidCounter = jwtidCounter + 1;
 
-      return jwt.sign({payload}, process.env.SERVER_JWT_SECRET, {
+      return jwt.sign({payload}, SERVER_JWT_SECRET, {
         expiresIn: options.expiresIn,
         jwtid: jwtidCounter + ""
       });
@@ -26,7 +27,7 @@ const JwtService = {
 
   jwtGetToken: (request) => {
     try {
-      if (process.env.SERVER_JWT !== "true") {
+      if (SERVER_JWT !== true) {
         console.log("[JWT] JWT flag is not set");
         throw new Error("[JWT] JWT flag is not set");
       }
@@ -45,11 +46,11 @@ const JwtService = {
 
   jwtVerify: (token) => {
     try {
-      if (process.env.SERVER_JWT !== "true")
+      if (SERVER_JWT !== true)
         throw new Error("[JWT] JWT flag is not setted");
       return jwt.verify(
         token,
-        process.env.SERVER_JWT_SECRET,
+        SERVER_JWT_SECRET,
         (err, decoded) => {
           if (err) return res.status(401).json({
             success: false,
